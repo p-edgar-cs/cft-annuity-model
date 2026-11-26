@@ -378,20 +378,20 @@ All assumptions are entered as **annual** rates; the model converts them.
 
 ### What's supported?
 
-| Area | Supported | Not supported (yet) |
-|---|---|---|
-| Products | Single premium deferred annuities (account value products) | Ongoing premiums, life insurance, payout annuities, indexed or variable products |
-| Time step | Annual or monthly | Quarterly |
-| Scenarios | NY7, custom parallel shifts from CSV, rate floor | Stochastic scenarios, curve twists or non-parallel shifts, scenario files in Excel |
-| Crediting | Earned rate − target spread, with a minimum guarantee for each policy | Crediting rate caps, portfolio vs. new-money crediting strategies |
-| Lapses | Base rate by policy year × multiplier, dynamic lapses by competitor rate gap, maximum rate | Different lapse tables by product within one run |
-| Surrender charges | One schedule by policy year | Different schedules by product, market value adjustments |
-| Mortality | One `age, qx` table × multiplier | Select-and-ultimate tables, tables by gender, mortality improvement |
-| Expenses | Per policy (with inflation) + % of account value | Commissions, acquisition expenses |
-| Assets | Non-callable fixed-rate bonds, cash, reinvestment at par, pro-rata selling or borrowing | Callable bonds, MBS, defaults, floating rate, derivatives |
-| Reserves and accounting | Reserve = account value, book value surplus, simplified IMR | CARVM / VM-22, AVR, taxes, required capital |
-| Input files | CSV, Excel (any sheet), Parquet; column mapping; percent or decimal rates; model points | Database connections (export to CSV/Excel first) |
-| Outputs | Excel, CSV, PNG charts, Markdown memo, JSON run log, change log | Word/PDF directly (convert the memo with pandoc or Print to PDF) |
+| Area | Supported |
+|---|---|
+| Products | Single premium deferred annuities (account value products) |
+| Time step | Annual or monthly |
+| Scenarios | NY7, custom parallel shifts from CSV, rate floor |
+| Crediting | Earned rate − target spread, with a minimum guarantee for each policy |
+| Lapses | Base rate by policy year × multiplier, dynamic lapses by competitor rate gap, maximum rate |
+| Surrender charges | One schedule by policy year |
+| Mortality | One `age, qx` table × multiplier |
+| Expenses | Per policy (with inflation) + % of account value |
+| Assets | Non-callable fixed-rate bonds, cash, reinvestment at par, pro-rata selling or borrowing |
+| Reserves and accounting | Reserve = account value, book value surplus, simplified IMR |
+| Input files | CSV, Excel (any sheet), Parquet; column mapping; percent or decimal rates; model points |
+| Outputs | Excel, CSV, PNG charts, Markdown memo, JSON run log, change log |
 
 ### How do I add a new NY7-style scenario?
 

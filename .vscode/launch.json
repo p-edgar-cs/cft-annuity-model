@@ -1,0 +1,32 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "CFT: run base (annual)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "cft_model",
+      "args": ["run", "-c", "config/base.yaml", "-v"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "CFT: run monthly",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "cft_model",
+      "args": ["run", "-c", "config/monthly.yaml"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "CFT: validate inputs",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "cft_model",
+      "args": ["validate"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

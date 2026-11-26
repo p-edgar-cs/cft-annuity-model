@@ -1,0 +1,8 @@
+# Same as base.yaml, but projected monthly. Only the differences are listed.
+extends: base.yaml
+
+run:
+  name: monthly
+
+projection:
+  time_step: monthly

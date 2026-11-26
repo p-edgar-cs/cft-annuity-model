@@ -1,0 +1,135 @@
+# =============================================================================
+# Base configuration: illustrative Cash Flow Testing model for a block of
+# Single Premium Deferred Annuities (SPDA).
+#
+# All rates are annual effective decimals (0.04 = 4%) unless inputs.rate_units
+# is set to "percent". Paths are relative to the project root.
+#
+# To make a variation without copying everything, create a new YAML file with
+#   extends: base.yaml
+# and only the keys you want to change (see config/monthly.yaml).
+# Any key can also be overridden from the command line:
+#   python -m cft_model run --set liability.crediting.target_spread=0.0125
+# =============================================================================
+
+run:
+  name: base                 # used in the output folder name
+  output_dir: output
+  valuation_date: "2025-12-31"
+  company: "Illustrative Life Insurance Co."   # appears in the memo
+  block: "SPDA block (synthetic data)"
+
+projection:
+  time_step: annual          # annual | monthly
+  years: 30
+
+inputs:
+  rate_units: decimal        # decimal | percent (applies to every rate column below)
+
+  policies:
+    path: data/policies.csv  # .csv, .xlsx or .parquet
+    sheet: null              # Excel sheet name, if using .xlsx
+    # Map model field -> column name in YOUR file. Change the right-hand side
+    # to load an extract with different headers without editing code.
+    columns:
+      policy_id: policy_id
+      issue_age: issue_age
+      duration: duration_years          # completed policy years at valuation
+      account_value: account_value
+      guaranteed_rate: guaranteed_min_rate
+      policy_count: policy_count        # optional (defaults to 1); use for model points
+      attained_age: attained_age        # optional (defaults to issue_age + duration)
+
+  assets:
+    path: data/assets.csv
+    sheet: null
+    columns:
+      asset_id: asset_id
+      par: par
+      coupon: coupon_rate
+      maturity: maturity_years          # years from valuation date
+      spread: credit_spread             # spread over Treasury used for pricing
+      book_value: book_value            # optional (defaults to par)
+    # Scale the asset file so that book assets = ratio x starting reserve
+    # (1.00 = test the reserve-backing assets only, with no starting surplus).
+    # Set to null to use the asset file exactly as given (e.g. real portfolio).
+    scale_to_reserve_ratio: 1.00
+
+  yield_curve:
+    path: data/yield_curve.csv
+    columns:
+      tenor: tenor_years
+      rate: rate
+
+  mortality:
+    path: data/mortality_illustrative.csv
+    columns:
+      age: age
+      qx: qx
+
+scenarios:
+  source: ny7                # ny7 | csv
+  csv_path: data/scenarios_custom_example.csv   # used when source: csv
+  include: [1, 2, 3, 4, 5, 6, 7]                # scenario ids/names to run
+  rate_floor: 0.0025         # no rate on the shifted curve goes below this
+
+liability:
+  crediting:
+    target_spread: 0.020     # credited = max(guaranteed, earned rate - spread)
+  lapse:
+    # Base annual lapse rate by policy year; the last value applies thereafter.
+    # Year 8 shows the "shock lapse" when surrender charges end.
+    base_by_policy_year: [0.03, 0.03, 0.03, 0.04, 0.04, 0.05, 0.06, 0.25, 0.10]
+    base_multiplier: 1.0
+    max_rate: 0.60
+    dynamic:
+      enabled: true
+      competitor_tenor: 5          # Treasury tenor used as the competitor benchmark
+      competitor_spread: -0.005    # competitor rate = Treasury(tenor) + spread
+      threshold: 0.005             # gap (competitor - credited) ignored below this
+      slope: 50.0                  # +50% lapses per 1% of gap above threshold
+      max_multiplier: 4.0
+  surrender_charges: [0.07, 0.06, 0.05, 0.04, 0.03, 0.02, 0.01]   # by policy year; 0 after
+  mortality_multiplier: 1.0
+  maturity_age: 100          # remaining account value paid out at this attained age
+  expenses:
+    per_policy: 100.0        # annual maintenance per policy
+    pct_of_av: 0.0025        # annual % of account value (investment/admin)
+    inflation: 0.025         # applied to the per-policy expense
+
+assets:
+  reinvestment:
+    enabled: true
+    term_years: 10           # positive cash buys new bonds of this term at par
+    spread: 0.012            # new-money coupon = Treasury(term) + spread
+  disinvestment: sell        # sell | borrow  (how negative cash flow is covered)
+  borrow_spread: 0.005       # borrowing cost over the short rate (borrow mode)
+  cash_tenor: 0.25           # tenor of the short rate earned on cash
+  imr:
+    enabled: true            # defer realised gains/losses on sales through the IMR,
+                             # released over the remaining life of the bonds sold
+
+reporting:
+  discount_tenor: 1          # surplus is discounted at the scenario's rate for this tenor
+  adequacy_metric: pv_ending_surplus   # pv_ending_surplus | min_pv_surplus | ending_surplus
+  excel: true
+  charts: true
+  memo: true
+  detail_frequency: annual   # annual | model  (monthly runs can be summarised by year)
+
+# Each sensitivity re-runs every scenario with the overrides applied.
+sensitivities:
+  - name: Base
+    overrides: {}
+  - name: Lapse x1.5
+    overrides:
+      liability.lapse.base_multiplier: 1.5
+  - name: Spread -50bp
+    overrides:
+      liability.crediting.target_spread: 0.015
+  - name: Mortality x0.9
+    overrides:
+      liability.mortality_multiplier: 0.9
+  - name: Dynamic lapse x2
+    overrides:
+      liability.lapse.dynamic.slope: 100.0

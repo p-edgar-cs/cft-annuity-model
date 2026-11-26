@@ -1,0 +1,8 @@
+scenario,label,time_years,shift
+Base,Level rates,0,0.0
+Inverted shock,Short-term spike then fall,0,0.0
+Inverted shock,Short-term spike then fall,1,0.025
+Inverted shock,Short-term spike then fall,3,-0.01
+Inverted shock,Short-term spike then fall,6,0.0
+Slow rise 2pct,+2% over 20 years,0,0.0
+Slow rise 2pct,+2% over 20 years,20,0.02

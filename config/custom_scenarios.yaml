@@ -1,0 +1,16 @@
+# Example: run your own interest rate scenarios from a CSV instead of NY7.
+# The CSV has columns: scenario, time_years, shift  (parallel shift to the
+# starting curve, linearly interpolated between the points you give).
+extends: base.yaml
+
+run:
+  name: custom_scenarios
+
+scenarios:
+  source: csv
+  csv_path: data/scenarios_custom_example.csv
+  include: [Base, Inverted shock, Slow rise 2pct]
+
+sensitivities:
+  - name: Base
+    overrides: {}

@@ -13,8 +13,7 @@ scenarios (or your own scenarios), runs assumption sensitivities, and produces:
   comparing each run to the previous one.
 
 > **Synthetic data, illustrative model.** All policy and asset data is made up, and the mortality
-> table and yield curve are illustrative. This is a learning and portfolio project, not a production
-> valuation model or an actuarial opinion.
+> table and yield curve are illustrative. Table and yield curves are illustrative. It has the functionality for your own inputs.
 
 ---
 
@@ -305,3 +304,114 @@ cft-annuity-model/
 ├── Makefile                   # make setup / run / test
 └── .vscode/                   # interpreter, test and run/debug settings
 ```
+
+---
+
+## FAQ
+
+### Which file does which calculation?
+
+| File | What it calculates or does | Key functions |
+|---|---|---|
+| `cft_model/projection.py` | **The main engine.** Runs every period for one scenario: crediting, expenses, account value growth, deaths, lapses (base and dynamic), surrenders net of surrender charges, maturities, reserve, IMR, surplus, discounting. Also converts monthly results to yearly for reporting. | `project()`, `_to_period()`, `_by_policy_year()`, `annualise()` |
+| `cft_model/assets.py` | **Asset side:** coupons, bond maturities, interest on cash, portfolio earned rate (used for crediting), bond market values, buying new bonds, selling bonds to pay for negative cash flow (and the gain or loss on the sale). | `Portfolio.roll_forward()`, `earned_rate()`, `bond_market_values()`, `buy()`, `sell_to_raise()`, `accrue_cash()` |
+| `cft_model/scenarios.py` | **Interest rate scenarios:** NY7 definitions, custom scenarios from CSV, and the rate shift at any point in time. | `NY7`, `ny7_scenarios()`, `csv_scenarios()`, `Scenario.shift()` |
+| `cft_model/curve.py` | **Yield curve:** looks up the rate at any tenor (linear interpolation), applies the scenario shift and the rate floor, calculates discount factors. | `YieldCurve.rate()`, `discount_factors()` |
+| `cft_model/runner.py` | Runs every scenario × sensitivity combination and calculates the summary measures: PV of ending surplus, minimum PV of surplus, total realized gains, peak lapse rate. | `run_all()`, `summarise()` |
+| `cft_model/inputs.py` | Reads the input files (CSV, Excel, Parquet), maps column names, converts percents, and checks the data. | `load_policies()`, `load_assets()`, `load_curve()`, `load_mortality()` |
+| `cft_model/config.py` | Reads the YAML config, handles `extends:` and `--set` overrides, checks settings, sets the time step length (1 or 1/12). | `load_config()`, `apply_overrides()`, `time_step_years()`, `validate()` |
+| `cft_model/reporting.py` | Writes the Excel report, charts, CSVs, run log (audit trail) and change log. | `write_outputs()`, `write_excel()`, `write_charts()`, `write_run_log()`, `write_change_log()` |
+| `cft_model/memo.py` | Writes the draft CFT memo, including the conclusion and the key-risk text based on the results. | `write_memo()` |
+| `cft_model/synthetic.py` | Creates the made-up input files in `data/`. | `write_all()` |
+| `cft_model/cli.py` | The command-line commands: `run`, `validate`, `generate-data`. | `main()` |
+
+### Where are the New York 7 calculations done?
+
+They happen in four steps across four files:
+
+1. **Definition: `cft_model/scenarios.py`.** The `NY7` dictionary defines each scenario as points of
+   (year, rate shift):
+
+   | # | Scenario | Points (year, shift) |
+   |---|---|---|
+   | 1 | Level | (0, 0%) |
+   | 2 | Gradual increase | (0, 0%) → (10, +5%) |
+   | 3 | Up then down | (0, 0%) → (5, +5%) → (10, 0%) |
+   | 4 | Pop-up | (0, +3%) |
+   | 5 | Gradual decrease | (0, 0%) → (10, −5%) |
+   | 6 | Down then up | (0, 0%) → (5, −5%) → (10, 0%) |
+   | 7 | Pop-down | (0, −3%) |
+
+   `Scenario.shift(t)` interpolates linearly between the points and holds the last value flat after
+   that. For example, scenario 2 is +0.5% at year 1 and +2.5% at year 5.
+
+2. **Selection: `scenarios.py` → `load_scenarios()`.** Picks NY7 or CSV based on `scenarios.source`,
+   and keeps only the scenarios listed in `scenarios.include`.
+
+3. **Applying the shift: `cft_model/projection.py` → `project()`.** At the start of each period:
+   ```python
+   shift = scenario.shift(t1)            # shift at the END of the period
+   short = curve.rate(cash_tenor, shift, floor)
+   ```
+   The shifted curve (`curve.py` → `YieldCurve.rate()`, which adds the shift and applies the floor) then
+   drives everything that depends on rates:
+   - competitor rate → dynamic lapses (`projection.py`)
+   - new-money rate for reinvestment (`projection.py`, step 8)
+   - market value of bonds when they are sold (`assets.py` → `bond_market_values()`)
+   - interest on cash (`assets.py` → `accrue_cash()`)
+   - discount rate for PV of surplus (`projection.py`)
+
+4. **Looping over scenarios: `cft_model/runner.py` → `run_all()`.** Calls `project()` once per
+   scenario for each sensitivity, then `summarise()` calculates the results for each one.
+
+### Where does annual vs. monthly come in?
+
+`config.py` → `time_step_years()` turns `projection.time_step` into `dt` (1 or 1/12). Then:
+
+- `projection.py` uses `dt` for the number of periods, `(1 + rate) ** dt` growth and discounting,
+  `_to_period()` to convert annual death and lapse rates, and expenses × `dt`.
+- `assets.py` uses it for `period_coupon` and to turn maturities into a number of periods.
+- `annualise()` adds monthly results up into years for the Excel report and charts. Set
+  `reporting.detail_frequency: model` to see every month instead.
+
+All assumptions are entered as **annual** rates; the model converts them.
+
+### What's supported?
+
+| Area | Supported | Not supported (yet) |
+|---|---|---|
+| Products | Single premium deferred annuities (account value products) | Ongoing premiums, life insurance, payout annuities, indexed or variable products |
+| Time step | Annual or monthly | Quarterly |
+| Scenarios | NY7, custom parallel shifts from CSV, rate floor | Stochastic scenarios, curve twists or non-parallel shifts, scenario files in Excel |
+| Crediting | Earned rate − target spread, with a minimum guarantee for each policy | Crediting rate caps, portfolio vs. new-money crediting strategies |
+| Lapses | Base rate by policy year × multiplier, dynamic lapses by competitor rate gap, maximum rate | Different lapse tables by product within one run |
+| Surrender charges | One schedule by policy year | Different schedules by product, market value adjustments |
+| Mortality | One `age, qx` table × multiplier | Select-and-ultimate tables, tables by gender, mortality improvement |
+| Expenses | Per policy (with inflation) + % of account value | Commissions, acquisition expenses |
+| Assets | Non-callable fixed-rate bonds, cash, reinvestment at par, pro-rata selling or borrowing | Callable bonds, MBS, defaults, floating rate, derivatives |
+| Reserves and accounting | Reserve = account value, book value surplus, simplified IMR | CARVM / VM-22, AVR, taxes, required capital |
+| Input files | CSV, Excel (any sheet), Parquet; column mapping; percent or decimal rates; model points | Database connections (export to CSV/Excel first) |
+| Outputs | Excel, CSV, PNG charts, Markdown memo, JSON run log, change log | Word/PDF directly (convert the memo with pandoc or Print to PDF) |
+
+### How do I add a new NY7-style scenario?
+
+Add a line to the `NY7` dictionary in `scenarios.py`. A better option is to leave the code alone:
+put the scenario in a CSV (`scenario, time_years, shift`) and set `scenarios.source: csv`. See
+`config/custom_scenarios.yaml`.
+
+### Why does the change log say there's nothing to compare?
+
+It compares against the previous run **with the same run name**. On the first run with a new name
+there's nothing earlier. Use `--name` to give runs the same name, or `--compare-to <folder>` to pick
+the run to compare against.
+
+### Why do annual and monthly results differ a little?
+
+The timing of cash flows changes. Monthly runs pay surrenders, reinvest and sell bonds 12 times a
+year, so the rates used are slightly different. The two give the same direction and similar size,
+and `tests/test_projection.py` checks they stay within a reasonable range of each other.
+
+### Where should I start if I want to change a calculation?
+
+Read `project()` in `projection.py` top to bottom. The steps are numbered in comments to match
+section 5 of this README. Then run `python -m pytest -q` to make sure nothing else broke.
